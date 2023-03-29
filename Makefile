@@ -7,8 +7,12 @@
 #.PRECIOUS: %.o
 
 CC = gcc
-CFLAGS = -Wall -Werror -g
+CFLAGS = -Wall -Werror
 LDFLAGS =
+
+ifdef DEBUG
+	CFLAGS+=-DDEBUG
+endif
 
 # Note: -lnsl does not seem to work on Mac OS but will
 # probably be necessary on Solaris for linking network-related functions 
@@ -19,7 +23,7 @@ INCLUDE = csapp.h
 OBJS = csapp.o echo.o
 INCLDIR = -I.
 
-PROGS = echoserveri echoclient 
+PROGS = serveur client 
 
 
 all: $(PROGS)

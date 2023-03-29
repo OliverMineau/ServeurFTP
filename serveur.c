@@ -3,13 +3,13 @@
  */
 
 #include "csapp.h"
+#include "structures.h"
+#include "serveur.h"
 
 #define NB_PROC 4
 
 #define MAX_NAME_LEN 256
 
-#define ERR_NO_ERR 0
-#define ERR_FICH_INEX 1
 
 int procPID[NB_PROC];
 
@@ -30,23 +30,49 @@ void ctrlCHandler(int signum){
     exit(0);
 }
 
-void lireFichier(int connfd){
+
+int lireCommande(int connfd){
     char commande[MAXLINE];
     rio_t rio;
     Rio_readinitb(&rio, connfd);
     Rio_readlineb(&rio, commande, MAXLINE);
+    
+    char * cmd = strtok(commande," \n");
+    
+    if(!strcmp(cmd,"get")){
+        //Lire donnée du client
+        lireFichier(strtok(NULL, " "),connfd);
+
+    }else if(!strcmp(cmd,"bye")){
+        //Ferme la connexion
+        printf("Disconnected\n");
+        header hd;
+        hd.flag = FLAG_DISCONNECT;
+        Rio_writen(connfd,&hd, sizeof(hd));
+        Close(connfd);
+        return -1;
+
+    }else{
+        printf("%s: Commande inconnue.\n",cmd);
+        header hd;
+        hd.flag = FLAG_ERR_CMD_INC;
+        Rio_writen(connfd,&hd, sizeof(hd));
+    }
+
+    return 0;
+}
+
+void lireFichier(char *commande, int connfd){
 
     //Enlever le \n a la fin de la commande
-    commande[strlen(commande)-1]='\0';
+    if(commande[strlen(commande)-1] == '\n'){
+        commande[strlen(commande)-1]='\0';
+    }
 
     printf("Commande recu : %s\n",commande);
 
-    size_t n;
-    char bufFichier[MAXLINE];
-    rio_t rioFichier;
     
     int f = open(commande,O_RDONLY);
-
 
     //Gestion de l'ouverture du fichier
     if (f != -1){
@@ -57,22 +83,29 @@ void lireFichier(int connfd){
         }
         printf("Taille fichier : %ld\n",stat_f.st_size);
 
+        //Envoi erreur et taille 
+        header hd;
+        hd.flag = FLAG_NO_ERR;
+        hd.taille = stat_f.st_size;
 
-        Rio_readinitb(&rioFichier, f);
-        int err = ERR_NO_ERR;
+        Rio_writen(connfd, &hd, sizeof(hd));
 
-        //Envoi du code d'erreur 0;
-        Rio_writen(connfd, &err, sizeof(int));
-        Rio_writen(connfd, &stat_f.st_size, sizeof(int));
-        while ((n = Rio_readlineb(&rioFichier, bufFichier, MAXLINE)) > 0) {
-            Rio_writen(connfd, bufFichier, n);
+        size_t n;
+        bloc blc;
+        while ((n = Rio_readn(f, blc.data, 256)) > 0) {
+            Rio_writen(connfd, blc.data, 256);
+            
+            #ifdef DEBUG
+            printf("Envoi de %ldoctets\n",n);
+            #endif
         }
 
         Close(f);
 
     }else{
-        int err = ERR_FICH_INEX;
-        Rio_writen(connfd,&err, sizeof(int));
+        header hd;
+        hd.flag = FLAG_ERR_FICH_INEX;
+        Rio_writen(connfd,&hd, sizeof(hd));
     }
 
 
@@ -138,10 +171,12 @@ int main(int argc, char **argv)
             printf("server connected to %s (%s) - fd:%d\n", client_hostname,
                 client_ip_string,connfd);
             
-            //Lire donnée du client
-            lireFichier(connfd);
+            int disconnect=0;
+            while(disconnect!=-1){
+                //Lire la commande
+                disconnect=lireCommande(connfd);
+            }
 
-            Close(connfd);
         }
 
     }else{
