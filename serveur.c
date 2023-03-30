@@ -30,33 +30,45 @@ void ctrlCHandler(int signum){
     exit(0);
 }
 
+void sigpipeHandler(int signum){
+    printf("Err sigpipe ecriture\n");
+}
 
 int lireCommande(int connfd){
-    char commande[MAXLINE];
-    rio_t rio;
-    Rio_readinitb(&rio, connfd);
-    Rio_readlineb(&rio, commande, MAXLINE);
-    
-    char * cmd = strtok(commande," \n");
-    
-    if(!strcmp(cmd,"get")){
-        //Lire donnée du client
-        lireFichier(strtok(NULL, " "),connfd);
+    char nom_fichier[MAX_CMD];
+    //rio_t rio;
+    //Rio_readinitb(&rio, connfd);
 
-    }else if(!strcmp(cmd,"bye")){
+    int cmd;
+    Rio_readn(connfd, &cmd, sizeof(int));
+    printf("Commande recu : %d\n",cmd);
+
+    header hd;
+
+    switch (cmd)
+    {
+    case 0:
+
+        Rio_readn(connfd, nom_fichier, MAX_CMD);
+        printf("Fichier: %s\n",nom_fichier);
+
+        //Lire donnée du client
+        lireFichier(nom_fichier,connfd);
+        break;
+
+    case 1:
         //Ferme la connexion
         printf("Disconnected\n");
-        header hd;
         hd.flag = FLAG_DISCONNECT;
         Rio_writen(connfd,&hd, sizeof(hd));
         Close(connfd);
         return -1;
-
-    }else{
-        printf("%s: Commande inconnue.\n",cmd);
-        header hd;
+    
+    default:
+        printf("Commande inconnue.\n");
         hd.flag = FLAG_ERR_CMD_INC;
         Rio_writen(connfd,&hd, sizeof(hd));
+        break;
     }
 
     return 0;
@@ -93,8 +105,15 @@ void lireFichier(char *commande, int connfd){
         size_t n;
         bloc blc;
         while ((n = Rio_readn(f, blc.data, 256)) > 0) {
+
             Rio_writen(connfd, blc.data, 256);
-            
+
+            //Gesstion erreur ecriture pipe
+            /*if(errno!=0){
+                printf("Erreur Sigpipe Ecriture\n");
+                exit(1);
+            }*/
+
             #ifdef DEBUG
             printf("Envoi de %ldoctets\n",n);
             #endif
@@ -105,7 +124,7 @@ void lireFichier(char *commande, int connfd){
     }else{
         header hd;
         hd.flag = FLAG_ERR_FICH_INEX;
-        Rio_writen(connfd,&hd, sizeof(hd));
+        Rio_writen(connfd, &hd, sizeof(hd));
     }
 
 
@@ -126,6 +145,7 @@ int main(int argc, char **argv)
     
     Signal(SIGCHLD,childHandler);
     Signal(SIGINT,ctrlCHandler);
+    Signal(SIGPIPE,sigpipeHandler);
 
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -182,7 +202,7 @@ int main(int argc, char **argv)
     }else{
         //Pere
         while(1){
-            sleep(1);
+            pause();
         }
     }
 }
