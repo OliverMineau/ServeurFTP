@@ -8,14 +8,20 @@
 #define FLAG_ERR_CMD_INC 2
 #define FLAG_DISCONNECT 3
 
-#define CMD_GET 0
-#define CMD_BYE 1
+#define CMD_GET 1
+#define CMD_BYE 2
 
 
 typedef struct {
     int flag;
     int taille;
 } header;
+
+typedef struct {
+    int commande;
+    char nomfichier[MAX_CMD];
+    int position;
+} headerClient;
 
 typedef struct {
     char data[256];

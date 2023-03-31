@@ -31,34 +31,34 @@ void ctrlCHandler(int signum){
 }
 
 void sigpipeHandler(int signum){
-    printf("Err sigpipe ecriture\n");
+    printf("Err sigpipe ecriture handler\n");
+    exit(0);
 }
 
-int lireCommande(int connfd){
-    char nom_fichier[MAX_CMD];
-    //rio_t rio;
-    //Rio_readinitb(&rio, connfd);
+int lireCommande(int connfd, char *client_name){
 
-    int cmd;
-    Rio_readn(connfd, &cmd, sizeof(int));
-    printf("Commande recu : %d\n",cmd);
+    headerClient hc;
+    Rio_readn(connfd, &hc, sizeof(headerClient));
 
     header hd;
-
-    switch (cmd)
+    switch (hc.commande)
     {
     case 0:
-
-        Rio_readn(connfd, nom_fichier, MAX_CMD);
-        printf("Fichier: %s\n",nom_fichier);
-
-        //Lire donnée du client
-        lireFichier(nom_fichier,connfd);
+        printf("Client %s s'est deconnecté inopinément\n",client_name);
+        Close(connfd);
+        return -1;
         break;
 
-    case 1:
+    case CMD_GET:
+
+        printf("Fichier: %s\n",hc.nomfichier);
+        //Lire donnée du client
+        return lireFichier(hc,connfd);
+        break;
+
+    case CMD_BYE:
         //Ferme la connexion
-        printf("Disconnected\n");
+        printf("Client %s s'est deconnecté\n",client_name);
         hd.flag = FLAG_DISCONNECT;
         Rio_writen(connfd,&hd, sizeof(hd));
         Close(connfd);
@@ -74,31 +74,29 @@ int lireCommande(int connfd){
     return 0;
 }
 
-void lireFichier(char *commande, int connfd){
+int lireFichier(headerClient hc, int connfd){
 
-    //Enlever le \n a la fin de la commande
-    if(commande[strlen(commande)-1] == '\n'){
-        commande[strlen(commande)-1]='\0';
-    }
-
-    printf("Commande recu : %s\n",commande);
+    printf("Commande recu : %s\n",hc.nomfichier);
 
     
-    int f = open(commande,O_RDONLY);
+    int f = open(hc.nomfichier,O_RDONLY);
+    lseek(f, hc.position, SEEK_SET);
 
     //Gestion de l'ouverture du fichier
     if (f != -1){
 
         struct stat stat_f;
-        if (stat(commande, &stat_f) < 0) {
-            return;
-        }
+        stat(hc.nomfichier, &stat_f);
+
+        #ifdef DEBUG
         printf("Taille fichier : %ld\n",stat_f.st_size);
+        printf("Taille a lire : %ld\n",stat_f.st_size-hc.position);
+        #endif
 
         //Envoi erreur et taille 
         header hd;
         hd.flag = FLAG_NO_ERR;
-        hd.taille = stat_f.st_size;
+        hd.taille = stat_f.st_size-hc.position;
 
         Rio_writen(connfd, &hd, sizeof(hd));
 
@@ -106,13 +104,17 @@ void lireFichier(char *commande, int connfd){
         bloc blc;
         while ((n = Rio_readn(f, blc.data, 256)) > 0) {
 
-            Rio_writen(connfd, blc.data, 256);
+            rio_writen(connfd, blc.data, 256);
 
             //Gesstion erreur ecriture pipe
-            /*if(errno!=0){
-                printf("Erreur Sigpipe Ecriture\n");
-                exit(1);
-            }*/
+            if(errno!=0){
+                printf("Erreur client inaccessible\n");
+                Close(f);
+                Close(connfd);
+                return -1;
+            }
+
+            //printf("bien envoye\n");
 
             #ifdef DEBUG
             printf("Envoi de %ldoctets\n",n);
@@ -121,13 +123,15 @@ void lireFichier(char *commande, int connfd){
 
         Close(f);
 
+        printf("Fin du transfert\n\n");
+
     }else{
         header hd;
         hd.flag = FLAG_ERR_FICH_INEX;
         Rio_writen(connfd, &hd, sizeof(hd));
     }
 
-
+    return 0;
 }
 
 
@@ -194,7 +198,7 @@ int main(int argc, char **argv)
             int disconnect=0;
             while(disconnect!=-1){
                 //Lire la commande
-                disconnect=lireCommande(connfd);
+                disconnect=lireCommande(connfd,client_hostname);
             }
 
         }

@@ -2,8 +2,8 @@
 #define __ECHO_SERVERI_H__
 
 
-void lireFichier(char *commande, int connfd);
-int lireCommande(int connfd);
+int lireFichier(headerClient hc, int connfd);
+int lireCommande(int connfd, char *client_name);
 
 
 #endif

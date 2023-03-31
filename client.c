@@ -45,29 +45,72 @@ int main(int argc, char **argv)
     while (!deco && Fgets(commande, MAX_CMD, stdin) != NULL) {
         commande[strlen(commande)-1]='\0';
         
-        char *cmd = strtok(commande, " ");
-        char *nomfichier = strtok(NULL, " ");
+        char *cmd = strtok(commande, " \n");
+
+        headerClient hc;
+
+        if(cmd==NULL){
+            continue;
+        }
         
-        int cmd_num;
+        //Gestion des commandes
         if(!strcmp(cmd,"get")){
-            cmd_num=CMD_GET;
-            Rio_writen(clientfd,&cmd_num, sizeof(int));
-            //Envoi nom fichier
-            Rio_writen(clientfd, nomfichier, MAX_CMD);
+            hc.commande=CMD_GET;
 
         }else if(!strcmp(cmd,"bye")){
-            cmd_num=CMD_BYE;
-            Rio_writen(clientfd,&cmd_num, sizeof(int));
+            hc.commande=CMD_BYE;
 
         }else{
             printf("Commande inconnue\n");
             continue;
         }
 
-        
-        
-        printf("Commande envoyée.\n");
+        char *nomfichier = NULL;
+        char newname[MAX_CMD];
+        if(hc.commande!=CMD_BYE){
+            //renommage nom du fichier en telechargement
+            nomfichier = strtok(NULL, " \n");
+            strcpy(newname,nomfichier);
+            strcat(newname,".dl");
 
+            hc.position = 0;
+            strcpy(hc.nomfichier,nomfichier);
+
+        }
+
+        //si fichier existe pas Stat du fichier (taille)
+        struct stat stat_f;
+        if (hc.commande!=CMD_BYE) {
+            
+            if(stat(newname, &stat_f) >= 0){
+                printf("Voulez vous reprendre le dernier telechargement ? (y/n) :");
+                
+                char rep[20];
+                Fgets(rep, MAX_CMD, stdin);
+
+                //Envoyer la position ou on est
+                if(rep == NULL || rep[0] == 'y'){
+                    hc.position = stat_f.st_size;
+                }
+
+                printf("Reprise du téléchargement de %s\n",hc.nomfichier);
+
+            }else{
+                printf("Téléchargement de %s\n",hc.nomfichier);
+            }
+            
+
+        }
+
+        if(hc.commande != CMD_BYE){
+        }
+        
+        Rio_writen(clientfd, &hc, sizeof(headerClient));
+
+
+        #ifdef DEBUG
+            printf("Commande envoyée.\n");
+        #endif
 
 
         clock_t debut_temps = clock(); 
@@ -106,15 +149,24 @@ int main(int argc, char **argv)
         }
 
         int total_bytes = hd.taille;
-        printf("Total : %d\n",total_bytes);
 
 
-        int f = open(nomfichier, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        #ifdef DEBUG
+            printf("Total : %d\n",total_bytes);
+        #endif
+
+        //Overture du fichier
+        int f;
+        if(hc.position==0)
+            f = open(newname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        else
+            f = open(newname, O_WRONLY | O_APPEND | O_CREAT, 0644);
 
         int total_bytes_read = 0;
         bloc blc;
         while (total_bytes_read<total_bytes && (n = Rio_readn(clientfd, blc.data, 256)) > 0 )
         {
+            //printf("bien recu\n");
 
             if(total_bytes_read+n > total_bytes){
                 int nn = total_bytes-total_bytes_read;
@@ -138,19 +190,34 @@ int main(int argc, char **argv)
 
         Close(f);
 
+
+
         //Gestion erreur lecture pipe
         if(n == 0 && total_bytes_read < total_bytes){
+            printf("lu : %d\n",total_bytes_read);
+            printf("total : %d\n",total_bytes);
+            printf("n : %d\n",n);
             printf("Erreur Sigpipe Lecture\n");
             exit(1);
+        }
+
+        if(total_bytes_read == total_bytes && rename(newname, nomfichier) != 0) {
+            fprintf(stderr,"Erreur: renommage fichier\n");
         }
 
         clock_t fin_temps = clock();
         double duree = (double)(fin_temps - debut_temps) / CLOCKS_PER_SEC;
         int debit = (total_bytes_read/1000) / duree;
-        printf("Reception de %d octets en %f secondes (%d Koctets/s)\n",total_bytes_read,duree,debit);
+        printf("Reception de %d octets en %f secondes (%d Koctets/s)\n\n",total_bytes_read,duree,debit);
         
     }
 
     Close(clientfd);
     exit(0);
 }
+
+
+/**
+ * Erreur apres la reprise de telechargement err sigpipe serveur
+ * 
+ */
