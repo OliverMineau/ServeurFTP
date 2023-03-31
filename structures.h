@@ -5,8 +5,7 @@
 
 #define FLAG_NO_ERR 0
 #define FLAG_ERR_FICH_INEX 1
-#define FLAG_ERR_CMD_INC 2
-#define FLAG_DISCONNECT 3
+#define FLAG_DISCONNECT 2
 
 #define CMD_GET 1
 #define CMD_BYE 2

@@ -5,12 +5,67 @@
 #include <time.h>
 
 
-
 void sigpipeHandler(int signum){
+    //Le serveur n'est plus accessible : Deconnexion du client
     printf("Le serveur s'est fermé inopinément\n");
     printf("Deconnexion\n");
     exit(0);
 }
+
+int gestionDesCommandes(char *cmd, headerClient *hc){
+    if(!strcmp(cmd,"get")){
+        hc->commande=CMD_GET;
+
+    }else if(!strcmp(cmd,"bye")){
+        hc->commande=CMD_BYE;
+
+    }else{
+        printf("Commande inconnue\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+int renommageFichier(char *nomFichier, char *nomTemp, headerClient *hc){
+    //renommage nom du fichier en telechargement
+    nomFichier = strtok(NULL, " \n");
+
+    if(nomFichier == NULL){
+        return 1;
+    }
+
+    strcpy(nomTemp,nomFichier);
+    strcat(nomTemp,".dl");
+
+    hc->position = 0;
+    strcpy(hc->nomfichier,nomFichier);
+
+    return 0;
+}
+
+void gestionDeFichier(char *nomTemp, headerClient *hc){
+    
+    struct stat stat_f;
+
+    if(stat(nomTemp, &stat_f) >= 0){
+        printf("Voulez vous reprendre le dernier telechargement ? (y/n) :");
+        
+        char rep[20];
+        Fgets(rep, MAX_CMD, stdin);
+
+        //Envoyer la position ou on est
+        if(rep == NULL || rep[0] == 'y'){
+            hc->position = stat_f.st_size;
+        }
+
+        printf("Reprise du téléchargement de %s\n",hc->nomfichier);
+
+    }else{
+        printf("Téléchargement de %s\n",hc->nomfichier);
+    }
+}
+
 
 int main(int argc, char **argv)
 {
@@ -43,75 +98,42 @@ int main(int argc, char **argv)
     
     char commande[MAX_CMD];
 
+
     int deco = 0;
     while (!deco && Fgets(commande, MAX_CMD, stdin) != NULL) {
+        
+        //On enleve le retour à la ligne
         commande[strlen(commande)-1]='\0';
         
+        //On prend le pointeur du premier mot
         char *cmd = strtok(commande, " \n");
 
-        headerClient hc;
-
+        //Si la commande est vide, revenir au debut
         if(cmd==NULL){
             continue;
         }
         
         //Gestion des commandes
-        if(!strcmp(cmd,"get")){
-            hc.commande=CMD_GET;
-
-        }else if(!strcmp(cmd,"bye")){
-            hc.commande=CMD_BYE;
-
-        }else{
-            printf("Commande inconnue\n");
+        headerClient hc;
+        if(gestionDesCommandes(cmd, &hc)==1)
             continue;
-        }
 
-        char *nomfichier = NULL;
-        char newname[MAX_CMD];
-        if(hc.commande!=CMD_BYE){
-            //renommage nom du fichier en telechargement
-            nomfichier = strtok(NULL, " \n");
+        char *nomFichier = NULL;
+        char nomTemp[MAX_CMD];
 
-            if(nomfichier == NULL){
-                continue;
-            }
-
-            strcpy(newname,nomfichier);
-            strcat(newname,".dl");
-
-            hc.position = 0;
-            strcpy(hc.nomfichier,nomfichier);
-
-        }
-
-        //si fichier existe pas Stat du fichier (taille)
-        struct stat stat_f;
+        //Si fichier existe pas Stat du fichier (taille)
         if (hc.commande!=CMD_BYE) {
+
+            //Renommer le fichier 
+            if(renommageFichier(nomFichier, nomTemp, &hc)==1)
+                continue;
             
-            if(stat(newname, &stat_f) >= 0){
-                printf("Voulez vous reprendre le dernier telechargement ? (y/n) :");
-                
-                char rep[20];
-                Fgets(rep, MAX_CMD, stdin);
-
-                //Envoyer la position ou on est
-                if(rep == NULL || rep[0] == 'y'){
-                    hc.position = stat_f.st_size;
-                }
-
-                printf("Reprise du téléchargement de %s\n",hc.nomfichier);
-
-            }else{
-                printf("Téléchargement de %s\n",hc.nomfichier);
-            }
-            
+            //Gestion du fichier, debut/reprise du telechargement
+            gestionDeFichier(nomTemp, &hc);
 
         }
 
-        if(hc.commande != CMD_BYE){
-        }
-        
+        //Envoi de la commande au serveur
         Rio_writen(clientfd, &hc, sizeof(headerClient));
 
 
@@ -143,10 +165,6 @@ int main(int argc, char **argv)
         case FLAG_ERR_FICH_INEX:
             printf("%s: Aucun fichier de ce type.\n", commande);
             continue;
-
-        case FLAG_ERR_CMD_INC:
-            printf("%s: Commande inconnue.\n", commande);
-            continue;
         
         case FLAG_DISCONNECT:
             deco=1;
@@ -166,15 +184,14 @@ int main(int argc, char **argv)
         //Overture du fichier
         int f;
         if(hc.position==0)
-            f = open(newname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            f = open(nomTemp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         else
-            f = open(newname, O_WRONLY | O_APPEND | O_CREAT, 0644);
+            f = open(nomTemp, O_WRONLY | O_APPEND | O_CREAT, 0644);
 
         int total_bytes_read = 0;
         bloc blc;
         while (total_bytes_read<total_bytes && (n = Rio_readn(clientfd, blc.data, 256)) > 0 )
         {
-            //printf("bien recu\n");
 
             if(total_bytes_read+n > total_bytes){
                 int nn = total_bytes-total_bytes_read;
@@ -205,7 +222,7 @@ int main(int argc, char **argv)
             exit(1);
         }
 
-        if(total_bytes_read == total_bytes && rename(newname, nomfichier) != 0) {
+        if(total_bytes_read == total_bytes && rename(nomTemp, nomFichier) != 0) {
             fprintf(stderr,"Erreur: renommage fichier\n");
         }
 

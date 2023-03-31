@@ -1,6 +1,3 @@
-/*
- * echoserveri.c - An iterative echo server
- */
 
 #include "csapp.h"
 #include "structures.h"
