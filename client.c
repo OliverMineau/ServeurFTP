@@ -7,7 +7,9 @@
 
 
 void sigpipeHandler(int signum){
-    printf("Sigpipe handler\n");
+    printf("Le serveur s'est fermé inopinément\n");
+    printf("Deconnexion\n");
+    exit(0);
 }
 
 int main(int argc, char **argv)
@@ -70,6 +72,11 @@ int main(int argc, char **argv)
         if(hc.commande!=CMD_BYE){
             //renommage nom du fichier en telechargement
             nomfichier = strtok(NULL, " \n");
+
+            if(nomfichier == NULL){
+                continue;
+            }
+
             strcpy(newname,nomfichier);
             strcat(newname,".dl");
 
@@ -124,7 +131,10 @@ int main(int argc, char **argv)
         }
 
         if(n==0){
-            printf("Serveur fermé\n");
+            printf("Serveur inaccessible\n");
+            printf("Déconnexion\n");
+            deco=1;
+            continue;
         }
 
         //Gestion des erreurs
@@ -133,12 +143,10 @@ int main(int argc, char **argv)
         case FLAG_ERR_FICH_INEX:
             printf("%s: Aucun fichier de ce type.\n", commande);
             continue;
-            break;
 
         case FLAG_ERR_CMD_INC:
             printf("%s: Commande inconnue.\n", commande);
             continue;
-            break;
         
         case FLAG_DISCONNECT:
             deco=1;
@@ -190,14 +198,10 @@ int main(int argc, char **argv)
 
         Close(f);
 
-
-
         //Gestion erreur lecture pipe
         if(n == 0 && total_bytes_read < total_bytes){
-            printf("lu : %d\n",total_bytes_read);
-            printf("total : %d\n",total_bytes);
-            printf("n : %d\n",n);
-            printf("Erreur Sigpipe Lecture\n");
+            printf("Le serveur s'est fermé inopinément\n");
+            printf("Déconnexion\n");
             exit(1);
         }
 

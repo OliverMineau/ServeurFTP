@@ -31,7 +31,7 @@ void ctrlCHandler(int signum){
 }
 
 void sigpipeHandler(int signum){
-    printf("Err sigpipe ecriture handler\n");
+    printf("Client inaccessible\n");
     exit(0);
 }
 
@@ -47,14 +47,12 @@ int lireCommande(int connfd, char *client_name){
         printf("Client %s s'est deconnecté inopinément\n",client_name);
         Close(connfd);
         return -1;
-        break;
 
     case CMD_GET:
 
         printf("Fichier: %s\n",hc.nomfichier);
         //Lire donnée du client
         return lireFichier(hc,connfd);
-        break;
 
     case CMD_BYE:
         //Ferme la connexion
@@ -65,9 +63,6 @@ int lireCommande(int connfd, char *client_name){
         return -1;
     
     default:
-        printf("Commande inconnue.\n");
-        hd.flag = FLAG_ERR_CMD_INC;
-        Rio_writen(connfd,&hd, sizeof(hd));
         break;
     }
 
@@ -78,7 +73,6 @@ int lireFichier(headerClient hc, int connfd){
 
     printf("Commande recu : %s\n",hc.nomfichier);
 
-    
     int f = open(hc.nomfichier,O_RDONLY);
     lseek(f, hc.position, SEEK_SET);
 
@@ -93,6 +87,7 @@ int lireFichier(headerClient hc, int connfd){
         printf("Taille a lire : %ld\n",stat_f.st_size-hc.position);
         #endif
 
+
         //Envoi erreur et taille 
         header hd;
         hd.flag = FLAG_NO_ERR;
@@ -104,17 +99,7 @@ int lireFichier(headerClient hc, int connfd){
         bloc blc;
         while ((n = Rio_readn(f, blc.data, 256)) > 0) {
 
-            rio_writen(connfd, blc.data, 256);
-
-            //Gesstion erreur ecriture pipe
-            if(errno!=0){
-                printf("Erreur client inaccessible\n");
-                Close(f);
-                Close(connfd);
-                return -1;
-            }
-
-            //printf("bien envoye\n");
+            Rio_writen(connfd, blc.data, 256);
 
             #ifdef DEBUG
             printf("Envoi de %ldoctets\n",n);
@@ -126,6 +111,7 @@ int lireFichier(headerClient hc, int connfd){
         printf("Fin du transfert\n\n");
 
     }else{
+        //Fichier inexistant
         header hd;
         hd.flag = FLAG_ERR_FICH_INEX;
         Rio_writen(connfd, &hd, sizeof(hd));
