@@ -7,11 +7,8 @@
 
 #define MAX_NAME_LEN 256
 
-
 int procPID[NB_PROC];
 
-
-void echo(int connfd);
 
 void childHandler(int signum){
 	int pid;
@@ -22,7 +19,7 @@ void childHandler(int signum){
 
 void ctrlCHandler(int signum){
     for(int i = 0; i < NB_PROC; i++){
-        Kill(procPID[i],SIGINT);
+        kill(procPID[i],SIGINT);
     }
     exit(0);
 }
@@ -34,6 +31,7 @@ void sigpipeHandler(int signum){
 
 int lireCommande(int connfd, char *client_name){
 
+    //Lire la commande
     headerClient hc;
     Rio_readn(connfd, &hc, sizeof(headerClient));
 
@@ -46,7 +44,6 @@ int lireCommande(int connfd, char *client_name){
         return -1;
 
     case CMD_GET:
-
         printf("Fichier: %s\n",hc.nomfichier);
         //Lire donnée du client
         return lireFichier(hc,connfd);
@@ -84,7 +81,6 @@ int lireFichier(headerClient hc, int connfd){
         printf("Taille a lire : %ld\n",stat_f.st_size-hc.position);
         #endif
 
-
         //Envoi erreur et taille 
         header hd;
         hd.flag = FLAG_NO_ERR;
@@ -94,6 +90,7 @@ int lireFichier(headerClient hc, int connfd){
 
         size_t n;
         bloc blc;
+        //Envoyer des données tant qu'il y en a
         while ((n = Rio_readn(f, blc.data, 256)) > 0) {
 
             Rio_writen(connfd, blc.data, 256);
@@ -138,6 +135,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
         exit(0);
     }
+
     port = atoi(argv[1]);
     
     clientlen = (socklen_t)sizeof(clientaddr);
@@ -183,7 +181,6 @@ int main(int argc, char **argv)
                 //Lire la commande
                 disconnect=lireCommande(connfd,client_hostname);
             }
-
         }
 
     }else{
